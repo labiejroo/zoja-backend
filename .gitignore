@@ -1,0 +1,18 @@
+# zależności
+node_modules/
+
+# build i artefakty
+dist/
+artifacts/
+.package/
+*.tsbuildinfo
+
+# środowisko — NIGDY nie commitujemy prawdziwych wartości
+.env
+.env.*
+!.env.example
+
+# narzędzia
+coverage/
+.DS_Store
+*.log

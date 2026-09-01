@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Bez tego TypeScript 6 przerywa build, a wynik ląduje w dist/src/,
+    // co zmieniłoby ścieżki handlerów na dist/src/lambda.handler.
+    "rootDir": "./src"
+  },
+  "exclude": ["node_modules", "test", "dist", "artifacts", ".package", "**/*spec.ts"]
+}
