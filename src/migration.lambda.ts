@@ -2,7 +2,7 @@ import "reflect-metadata";
 
 import type { DataSource } from "typeorm";
 
-import { AppDataSource } from "./database/data-source.js";
+import { ensureDatabasePassword } from "./database/database-secret.js";
 
 export interface MigrationResult {
   ok: boolean;
@@ -24,10 +24,17 @@ export interface MigrationResult {
  */
 
 async function getDataSource(): Promise<DataSource> {
+  await ensureDatabasePassword();
+
+  // data-source.ts waliduje env już podczas importu,
+  // dlatego import musi nastąpić dopiero po zapewnieniu DB_PASSWORD.
+  const { AppDataSource } = await import("./database/data-source.js");
+
   // Ciepłe wywołanie zastaje już zainicjalizowany DataSource.
   if (AppDataSource.isInitialized) {
     return AppDataSource;
   }
+
   return AppDataSource.initialize();
 }
 

@@ -41,8 +41,28 @@ const exists = async (path) => {
 const log = (message) => console.log(`[package:lambda] ${message}`);
 
 async function main() {
-  if (!(await exists(distDir))) {
-    throw new Error('Brak katalogu dist/. Uruchom najpierw "npm run build".');
+  log("czyszczenie starego dist/");
+  await rm(distDir, { recursive: true, force: true });
+
+  log("budowanie aplikacji");
+  execFileSync(npmCommand, ["run", "build"], {
+    cwd: root,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+
+  const requiredDistFiles = [
+    "lambda.js",
+    "migration.lambda.js",
+    join("database", "database-secret.js"),
+  ];
+
+  for (const relativePath of requiredDistFiles) {
+    const fullPath = join(distDir, relativePath);
+
+    if (!(await exists(fullPath))) {
+      throw new Error(`Build nie utworzył wymaganego pliku: dist/${relativePath}`);
+    }
   }
 
   log("czyszczenie katalogów roboczych");

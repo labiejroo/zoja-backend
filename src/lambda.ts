@@ -4,8 +4,8 @@ import { configure as configureServerlessExpress } from "@codegenie/serverless-e
 import { NestFactory } from "@nestjs/core";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "aws-lambda";
 
-import { AppModule } from "./app.module.js";
 import { configureApp } from "./app.setup.js";
+import { ensureDatabasePassword } from "./database/database-secret.js";
 
 type ProxyHandler = (
   event: APIGatewayProxyEventV2,
@@ -26,6 +26,12 @@ type ProxyHandler = (
 let bootstrapPromise: Promise<ProxyHandler> | undefined;
 
 async function bootstrap(): Promise<ProxyHandler> {
+  await ensureDatabasePassword();
+
+  // AppModule importujemy dopiero po zapewnieniu DB_PASSWORD.
+  // Dzięki temu ConfigModule.forRoot() i validateEnv() zobaczą już komplet env.
+  const { AppModule } = await import("./app.module.js");
+
   const app = await NestFactory.create(AppModule, {
     // W Lambdzie logi i tak idą do CloudWatch przez stdout.
     logger: ["error", "warn", "log"],
