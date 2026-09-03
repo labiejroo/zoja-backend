@@ -8,7 +8,7 @@
  *
  * Jeden artefakt obsługuje DWIE funkcje Lambda:
  *   dist/lambda.handler            — API za API Gateway
- *   dist/migration.lambda.handler  — migracje, bez wyzwalacza
+ *   dist/migration-lambda.handler  — migracje, bez wyzwalacza
  */
 
 import { execFileSync } from "node:child_process";
@@ -53,7 +53,7 @@ async function main() {
 
   const requiredDistFiles = [
     "lambda.js",
-    "migration.lambda.js",
+    "migration-lambda.js",
     join("database", "database-secret.js"),
   ];
 
@@ -96,7 +96,7 @@ async function main() {
 
   log(`gotowe: artifacts/zoja-backend.zip (${megabytes} MB)`);
   log("handler API:      dist/lambda.handler");
-  log("handler migracji: dist/migration.lambda.handler");
+  log("handler migracji: dist/migration-lambda.handler");
 
   if (size > 50 * 1024 * 1024) {
     log("UWAGA: paczka przekracza 50 MB — bezpośredni upload nie zadziała, wgraj przez S3.");

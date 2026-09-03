@@ -106,7 +106,7 @@ Docelowy secret management projektujemy osobno.
 src/
   main.ts                    lokalny serwer HTTP (app.listen)
   lambda.ts                  handler API — cache bootstrapu poza handlerem
-  migration.lambda.ts        handler migracji — bez wyzwalacza
+  migration-lambda.ts        handler migracji — bez wyzwalacza
   app.setup.ts               wspólna konfiguracja obu entrypointów
   app.module.ts
 
@@ -262,7 +262,7 @@ aws lambda invoke --function-name zoja-db-migrations-lambda response.json
 cat response.json
 ```
 
-Handler (`src/migration.lambda.ts`) uruchamia migracje z `transaction: "all"` —
+Handler (`src/migration-lambda.ts`) uruchamia migracje z `transaction: "all"` —
 albo przejdą wszystkie, albo żadna. Zwraca wyłącznie nazwy zastosowanych
 migracji; pełny stack błędu zostaje w CloudWatch, bo może zawierać host
 i użytkownika bazy.
@@ -287,7 +287,7 @@ Jeden artefakt, **dwie funkcje Lambda**:
 | Funkcja | Handler | Wyzwalacz |
 | --- | --- | --- |
 | API | `dist/lambda.handler` | API Gateway HTTP API |
-| Migracje | `dist/migration.lambda.handler` | brak — ręcznie albo CI |
+| Migracje | `dist/migration-lambda.handler` | brak — ręcznie albo CI |
 
 Konfiguracja funkcji API w AWS (zarządza nią `zoja-infra`, nie ten skrypt):
 **256 MB, timeout 10 s, `nodejs24.x`**. Pierwsze 128 MB i 3 s nie wystarczyły —

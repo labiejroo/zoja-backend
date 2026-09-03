@@ -9,7 +9,7 @@ import { buildTypeOrmOptions } from "./typeorm.options.js";
 /**
  * DataSource używany poza kontekstem Nesta:
  *   - przez TypeORM CLI (generowanie i uruchamianie migracji lokalnie),
- *   - przez Lambdę migracyjną (migration.lambda.ts).
+ *   - przez Lambdę migracyjną (migration-lambda.ts).
  *
  * Aplikacja HTTP korzysta z tych samych opcji, ale przez DatabaseModule —
  * wspólnym mianownikiem jest buildTypeOrmOptions().
