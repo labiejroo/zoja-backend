@@ -13,7 +13,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { access, cp, mkdir, rm, stat } from "node:fs/promises";
+import { access, cp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,6 +53,13 @@ async function main() {
 
   log("kopiowanie dist/ — sam skompilowany JavaScript, bez źródeł i testów");
   await cp(distDir, join(stageDir, "dist"), { recursive: true });
+
+  log("dodawanie tymczasowego handlera kompatybilności index.handler");
+  await writeFile(
+    join(stageDir, "index.js"),
+    'export { handler } from "./dist/lambda.js";\n',
+    "utf8",
+  );
 
   log("kopiowanie package.json i package-lock.json");
   await cp(join(root, "package.json"), join(stageDir, "package.json"));
