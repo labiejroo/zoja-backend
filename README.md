@@ -70,7 +70,7 @@ ma `Public access = No`. To celowe, nie usterka.
 | --- | --- | --- |
 | `DB_HOST` | nie | Host bazy. W AWS: endpoint RDS. |
 | `DB_PORT` | nie | 5432. |
-| `DB_NAME` | nie | `zoja`. |
+| `DB_NAME` | nie | W AWS `zojaDB`. Lokalnie dowolna. |
 | `DB_USER` | nie | Master username. |
 | `DB_PASSWORD` | **tak** | Hasło. Nigdy w repozytorium. |
 | `DB_SSL` | nie | `true` w AWS, `false` lokalnie (kontener nie ma TLS). |
@@ -289,6 +289,10 @@ Jeden artefakt, **dwie funkcje Lambda**:
 | API | `dist/lambda.handler` | API Gateway HTTP API |
 | Migracje | `dist/migration.lambda.handler` | brak — ręcznie albo CI |
 
+Konfiguracja funkcji API w AWS (zarządza nią `zoja-infra`, nie ten skrypt):
+**256 MB, timeout 10 s, `nodejs24.x`**. Pierwsze 128 MB i 3 s nie wystarczyły —
+NestJS wstawał, ale wywołanie kończyło się timeoutem przy ~116 MB zużycia.
+
 ### Rozmiar paczki
 
 Aktualnie **21,9 MB spakowane, 113 MB rozpakowane**. Limity Lambdy to 50 MB
@@ -319,18 +323,20 @@ albo użyć `npm ci --os=linux --cpu=x64`.
 
 ## Konfiguracja API Gateway
 
-Dziś w HTTP API istnieje jedna trasa testowa: `GET /api/hello`. NestJS routuje
-sam, więc potrzebuje **catch-all**:
+NestJS routuje sam, więc HTTP API ma trasę **catch-all**:
 
 ```
-ANY /api           → integracja z Lambdą NestJS
-ANY /api/{proxy+}  → ta sama integracja
+ANY /api/{proxy+}  → integracja z Lambdą NestJS
 ```
 
-Dwie trasy, bo `{proxy+}` nie łapie gołego `/api`. Po ich dodaniu trasę
-`GET /api/hello` można usunąć.
+Zastąpiła pierwotną `GET /api/hello`. Zasób w Terraformie nadal nazywa się
+`aws_apigatewayv2_route.hello` — nazwy celowo nie zmienialiśmy, żeby nie robić
+`state mv` bez korzyści.
 
-Definicje czekają zakomentowane w `zoja-infra/terraform/api-gateway.tf`.
+`{proxy+}` **nie łapie gołego `/api`**. Na to potrzebna jest osobna trasa
+`ANY /api`, która czeka zakomentowana jako `api_root` w
+`zoja-infra/terraform/api-gateway.tf`. Dziś nic to nie blokuje, bo każdy
+endpoint ma segment po `/api`.
 
 ### Dlaczego ścieżki się zgadzają
 
@@ -404,7 +410,8 @@ domyślny import nie jest wywoływalny.
       `rejectUnauthorized` na `true`. Dziś połączenie jest szyfrowane, ale
       łańcuch zaufania nie jest weryfikowany.
 - [ ] Ustawić reserved concurrency na Lambdzie (`zoja-infra/terraform/lambda.tf`).
-- [ ] Dodać trasy catch-all w API Gateway i usunąć `GET /api/hello`.
+- [x] Trasa catch-all `ANY /api/{proxy+}` — zastąpiła `GET /api/hello`.
+- [ ] Dodać trasę `ANY /api` (`api_root`), gdy pojawi się endpoint na gołym `/api`.
 - [ ] Utworzyć `zoja-db-migrations-lambda` (konfiguracja gotowa, zakomentowana
       w `zoja-infra/terraform/lambda-migrations.tf`).
 - [ ] Docelowy secret management dla `DB_PASSWORD` — wymaga Interface VPC
