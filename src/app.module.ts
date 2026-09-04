@@ -4,6 +4,8 @@ import { ConfigModule } from "@nestjs/config";
 import { validateEnv } from "./config/env.validation.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { HealthModule } from "./health/health.module.js";
+import { ReservationsModule } from "./reservations/reservations.module.js";
+import { VisitSlotsModule } from "./visits/visit-slots.module.js";
 
 @Module({
   imports: [
@@ -18,7 +20,9 @@ import { HealthModule } from "./health/health.module.js";
     }),
     DatabaseModule,
     HealthModule,
-    // Tu dojdą ReservationsModule i AdminModule — patrz README w tych katalogach.
+    VisitSlotsModule,
+    ReservationsModule,
+    // Tu dojdzie AdminModule — patrz README w src/admin.
   ],
 })
 export class AppModule {}

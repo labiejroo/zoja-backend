@@ -16,6 +16,9 @@ infrastruktury (`zoja-infra`).
 - [Struktura projektu](#struktura-projektu)
 - [Cold start i pula połączeń](#cold-start-i-pula-połączeń)
 - [Model danych](#model-danych)
+- [API](#api)
+- [Terminy materializują się na żądanie](#terminy-materializują-się-na-żądanie)
+- [Prywatność w odczycie publicznym](#prywatność-w-odczycie-publicznym)
 - [Migracje przy prywatnym RDS](#migracje-przy-prywatnym-rds)
 - [Build i paczka Lambdy](#build-i-paczka-lambdy)
 - [Konfiguracja API Gateway](#konfiguracja-api-gateway)
@@ -299,6 +302,82 @@ MIGRATIONS = [CreateVisitSlotsAndReservations1788517800000]
 `synchronize = false` i `migrationsRun = false` — zawsze. Schemat bazy zmienia
 **wyłącznie Lambda migracyjna**, nigdy start aplikacji API.
 
+## API
+
+Globalny prefiks `api` ustawia `configureApp()`, więc kontroler `@Controller("reservations")`
+odpowiada pod `/api/reservations`. Ten sam `ValidationPipe` (`whitelist`,
+`forbidNonWhitelisted`, `transform`) obowiązuje lokalnie i w Lambdzie.
+
+### POST /api/reservations
+
+Tworzy prośbę o wizytę. Zwraca **201**.
+
+```json
+{
+  "id": "…", "status": "PENDING",
+  "slot": { "id": "…", "dateStart": "2026-09-05", "dateEnd": "2026-09-06" },
+  "message": "Twoja prośba o wizytę została wysłana i oczekuje na potwierdzenie…"
+}
+```
+
+| Sytuacja | Odpowiedź |
+|---|---|
+| termin zablokowany | 409 „Ten termin jest obecnie niedostępny." |
+| termin już minął | 409 „Ten termin już minął." |
+| ktoś był szybszy | 409 „Ten termin jest już zajęty." |
+| `dateEnd` < `dateStart` | 400 |
+| błąd walidacji / obce pole | 400 |
+
+`turnstileToken` jest przyjmowany, ale **nie zapisywany i nie logowany**.
+
+### GET /api/visit-slots?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+Zwraca **wyłącznie terminy istniejące w bazie**, nachodzące na zakres. Maksymalny
+zakres to 366 dni.
+
+```json
+[{ "id": "…", "dateStart": "2026-09-05", "dateEnd": "2026-09-06",
+   "isWeekend": true, "isBlocked": false, "blockedReason": null,
+   "reservation": { "status": "CONFIRMED", "guestName": "Babcia Krysia" } }]
+```
+
+## Terminy materializują się na żądanie
+
+**Nie pregenerujemy weekendów.** Kalendarz powstaje na frontendzie, a brak wiersza
+w `visit_slots` znaczy po prostu *zwykły wolny termin*. Wiersz pojawia się dopiero
+wtedy, gdy termin przestaje być zwyczajny — ktoś go rezerwuje albo gospodarze go
+blokują. Przy dwunastu weekendach w oknie `GET` potrafi zwrócić trzy pozycje;
+pozostałe dziewięć frontend traktuje jako wolne.
+
+Dwa równoległe żądania mogą chcieć utworzyć ten sam termin, więc INSERT idzie
+z `ON CONFLICT DO NOTHING` (`orIgnore()`), a wiersz odczytujemy po zakresie dat.
+Świadomie **nie** używamy `repository.upsert()` — generuje `DO UPDATE`, co
+nadpisałoby `is_blocked` ustawione wcześniej przez gospodarzy.
+
+Ostatecznym bezpiecznikiem przed dwiema aktywnymi rezerwacjami jest częściowy
+unikalny indeks w PostgreSQL, nie kod aplikacji. Serwis rozpoznaje naruszenie po
+**nazwie constraintu** (`uq_reservations_active_slot`), a nie po samym kodzie
+`23505`, i tłumaczy je na 409. Klient nie dostaje ani SQL-a, ani nazwy indeksu.
+
+## Prywatność w odczycie publicznym
+
+`GET /api/visit-slots` buduje odpowiedź **allowlistą**, pole po polu — nigdy przez
+rozlanie encji. Przy odejmowaniu wrażliwych kluczy każde nowe pole w encji
+domyślnie by wyciekło; przy dodawaniu domyślnie nie wychodzi nic.
+
+| Stan | Co widać publicznie |
+|---|---|
+| `PENDING` | `{ "status": "PENDING" }` — **bez** `guestName`, to dopiero prośba |
+| `CONFIRMED` + `isPrivate=false` | `{ "status": "CONFIRMED", "guestName": "…" }` |
+| `CONFIRMED` + `isPrivate=true` | `{ "status": "CONFIRMED" }` |
+| `REJECTED` / `CANCELLED` | nie są aktywne — termin wygląda na wolny |
+
+`guestEmail`, `notes`, `isPrivate` i znaczniki czasu rezerwacji **nie wychodzą
+nigdy**, niezależnie od statusu.
+
+Daty porównujemy w strefie `Europe/Warsaw`, nie w UTC Lambdy — inaczej między
+północą a drugą w nocy termin, który właśnie się zaczął, wyglądałby na przyszły.
+
 ## Migracje przy prywatnym RDS
 
 RDS ma `Public access = No`. TypeORM CLI z laptopa nie ma do niego trasy,
@@ -480,7 +559,11 @@ domyślny import nie jest wywoływalny.
 - [x] Dopisać encje do `ENTITIES` i migracje do `MIGRATIONS` w `typeorm.options.ts`.
 - [ ] **Uruchomić pierwszą migrację na RDS** przez `zoja-db-migrations-lambda`.
       Do tego czasu tabele istnieją wyłącznie w kodzie.
-- [ ] CRUD rezerwacji: `ReservationsModule` z DTO i walidacją.
+- [x] `ReservationsModule` i `VisitSlotsModule`: POST /api/reservations
+      oraz publiczny GET /api/visit-slots.
+- [ ] **Serwerowa weryfikacja tokenu Cloudflare Turnstile** — dziś token jest
+      przyjmowany i ignorowany. Wymagane przed publicznym uruchomieniem.
+- [ ] Wdrożyć ten kod do API Lambdy (`zoja-hello-api-lambda-central`).
 - [ ] E-mail do gościa po utworzeniu prośby.
 - [ ] E-mail do rodziców z linkami Potwierdź / Odrzuć.
 - [ ] Endpointy confirm/reject oraz kolumny `action_token_hash`
