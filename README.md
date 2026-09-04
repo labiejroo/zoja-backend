@@ -15,6 +15,7 @@ infrastruktury (`zoja-infra`).
 - [Zmienne środowiskowe i sekrety](#zmienne-środowiskowe-i-sekrety)
 - [Struktura projektu](#struktura-projektu)
 - [Cold start i pula połączeń](#cold-start-i-pula-połączeń)
+- [Model danych](#model-danych)
 - [Migracje przy prywatnym RDS](#migracje-przy-prywatnym-rds)
 - [Build i paczka Lambdy](#build-i-paczka-lambdy)
 - [Konfiguracja API Gateway](#konfiguracja-api-gateway)
@@ -226,6 +227,78 @@ Gdy pojawi się przynajmniej jedno z tych zjawisk:
 
 Do tego czasu Proxy to koszt bez korzyści — dlatego go nie ma.
 
+## Model danych
+
+Dwa pojęcia, świadomie rozłączone:
+
+| Encja | Tabela | Co reprezentuje |
+|---|---|---|
+| `VisitSlot` | `visit_slots` | termin/opcję przyjazdu wystawioną przez gospodarzy |
+| `Reservation` | `reservations` | prośbę konkretnej osoby o dany termin |
+
+Termin istnieje **niezależnie** od tego, czy ktoś o niego poprosił. To
+rozłączenie jest sednem modelu:
+
+```
+termin istnieje + nie jest zablokowany + brak aktywnej rezerwacji = termin wolny
+```
+
+Gdyby wszystko siedziało w jednej tabeli, „wolny weekend" musiałby być
+reprezentowany przez brak wiersza — a wtedy nie da się ani zablokować terminu,
+ani zachować historii odrzuconych próśb.
+
+### Statusy rezerwacji
+
+| Status | Znaczenie | Termin |
+|---|---|---|
+| `PENDING` | czeka na decyzję rodziców | **zajęty** |
+| `CONFIRMED` | zaakceptowana | **zajęty** |
+| `REJECTED` | odrzucona | wolny |
+| `CANCELLED` | odwołana | wolny |
+
+Odrzucenie i odwołanie **nie kasują** rekordu — historia zostaje.
+
+Blokada terminu nie jest statusem rezerwacji, tylko cechą samego terminu
+(`visit_slots.is_blocked`). Blokada nie ma gościa, e-maila ani decyzji do
+podjęcia, więc trzymanie jej jako rezerwacji wymuszałoby wiersze, które
+rezerwacjami nie są.
+
+### Jedna aktywna rezerwacja na termin
+
+Pilnuje tego **częściowy unikalny indeks** w PostgreSQL, a nie kod aplikacji:
+
+```sql
+CREATE UNIQUE INDEX "uq_reservations_active_slot"
+  ON "reservations" ("slot_id")
+  WHERE "status" IN ('PENDING', 'CONFIRMED');
+```
+
+Sprawdzenie „czy wolny?" w kodzie nie wystarcza — między odczytem a zapisem
+mieści się drugie żądanie, a Lambda bywa zwielokrotniona. Baza odrzuci drugi
+INSERT niezależnie od liczby równoległych procesów, bez żadnego locka.
+
+Warunek `WHERE` musi pozostać zgodny z `ACTIVE_RESERVATION_STATUSES`
+w `src/reservations/reservation.enums.ts`.
+
+### Prywatność
+
+`reservations.is_private` (domyślnie `false`) decyduje wyłącznie o tym, czy
+publicznie pokazujemy, **kto** przyjeżdża. Zaznaczone = inni widzą tylko
+„Zajęte". E-mail i notatki nie są publiczne nigdy, niezależnie od tej flagi.
+
+### Rejestr encji i migracji
+
+`ENTITIES` i `MIGRATIONS` w `src/database/typeorm.options.ts` są
+**jawnymi listami**, nie globami — powód opisany w komentarzu przy rejestrze.
+
+```
+ENTITIES   = [VisitSlot, Reservation]
+MIGRATIONS = [CreateVisitSlotsAndReservations1788517800000]
+```
+
+`synchronize = false` i `migrationsRun = false` — zawsze. Schemat bazy zmienia
+**wyłącznie Lambda migracyjna**, nigdy start aplikacji API.
+
 ## Migracje przy prywatnym RDS
 
 RDS ma `Public access = No`. TypeORM CLI z laptopa nie ma do niego trasy,
@@ -403,18 +476,34 @@ domyślny import nie jest wywoływalny.
 
 ## TODO
 
-- [ ] Zaprojektować encję `Reservation` i pierwszą migrację — dopiero po
-      działającym `/api/health` przez pełną ścieżkę z CloudFront.
-- [ ] Dopisać encje do `ENTITIES` i migracje do `MIGRATIONS` w `typeorm.options.ts`.
+- [x] Zaprojektować encje `VisitSlot` i `Reservation` oraz pierwszą migrację.
+- [x] Dopisać encje do `ENTITIES` i migracje do `MIGRATIONS` w `typeorm.options.ts`.
+- [ ] **Uruchomić pierwszą migrację na RDS** przez `zoja-db-migrations-lambda`.
+      Do tego czasu tabele istnieją wyłącznie w kodzie.
+- [ ] CRUD rezerwacji: `ReservationsModule` z DTO i walidacją.
+- [ ] E-mail do gościa po utworzeniu prośby.
+- [ ] E-mail do rodziców z linkami Potwierdź / Odrzuć.
+- [ ] Endpointy confirm/reject oraz kolumny `action_token_hash`
+      i `action_token_expires_at` (osobna migracja — do maila trafia token
+      jawny, w bazie ląduje wyłącznie hash).
+- [ ] E-mail do gościa po zmianie rezerwacji przez rodziców.
+- [ ] Admin CRUD dla trybu `?zoja`: lista terminów, edycja, blokowanie, zmiana
+      terminu, zwalnianie.
+- [ ] Podłączyć frontend do prawdziwego API (dziś działa na mockach).
+- [ ] Concurrency group w CI dla Lambdy migracyjnej — zastępuje niedostępną
+      na tym koncie rezerwację współbieżności.
+- [ ] Uzgodnić słownik statusów z frontendem: backend ma
+      `PENDING/CONFIRMED/REJECTED/CANCELLED`, frontend
+      `pending/booked/rejected/cancelled/blocked/expired`.
 - [ ] Włączyć pełną weryfikację TLS wobec RDS: dołożyć bundle `rds-ca` i zmienić
       `rejectUnauthorized` na `true`. Dziś połączenie jest szyfrowane, ale
       łańcuch zaufania nie jest weryfikowany.
 - [ ] Ustawić reserved concurrency na Lambdzie (`zoja-infra/terraform/lambda.tf`).
 - [x] Trasa catch-all `ANY /api/{proxy+}` — zastąpiła `GET /api/hello`.
 - [ ] Dodać trasę `ANY /api` (`api_root`), gdy pojawi się endpoint na gołym `/api`.
-- [ ] Utworzyć `zoja-db-migrations-lambda` (konfiguracja gotowa, zakomentowana
-      w `zoja-infra/terraform/lambda-migrations.tf`).
-- [ ] Docelowy secret management dla `DB_PASSWORD` — wymaga Interface VPC
-      Endpointu dla SSM albo innego rozwiązania.
+- [x] Utworzyć `zoja-db-migrations-lambda`.
+- [x] Docelowy secret management dla `DB_PASSWORD` — Secrets Manager przez
+      Interface VPC Endpoint. `DB_PASSWORD` nie istnieje już w env żadnej Lambdy.
+- [ ] Rotacja credentiala RDS i przegląd historycznych plików `terraform.tfstate`.
 - [ ] `AdminModule` z autoryzacją — dopóki go nie ma, do bazy nie wolno wpuścić
       prawdziwych danych osobowych.

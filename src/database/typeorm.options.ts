@@ -1,5 +1,9 @@
 import type { DataSourceOptions, EntitySchema, MixedList } from "typeorm";
 
+import { CreateVisitSlotsAndReservations1788517800000 } from "../migrations/1788517800000-CreateVisitSlotsAndReservations.js";
+import { Reservation } from "../reservations/reservation.entity.js";
+import { VisitSlot } from "../visits/visit-slot.entity.js";
+
 /**
  * Podzbiór konfiguracji potrzebny do zbudowania połączenia. Celowo nie zależymy
  * tu od ConfigService ani od `process.env`, żeby ta funkcja była wołalna
@@ -29,12 +33,13 @@ export interface DatabaseEnv {
  * przy debugowaniu „EntityMetadataNotFound" na produkcji.
  */
 export const ENTITIES: MixedList<string | (new () => any) | EntitySchema<any>> = [
-  // TODO: np. Reservation z src/reservations/reservation.entity.ts
+  VisitSlot,
+  Reservation,
 ];
 
 /** REJESTR MIGRACJI — ta sama zasada co przy encjach. */
 export const MIGRATIONS: MixedList<string | (new () => any)> = [
-  // TODO: kolejne migracje z src/migrations/
+  CreateVisitSlotsAndReservations1788517800000,
 ];
 
 /* eslint-enable @typescript-eslint/no-explicit-any */
