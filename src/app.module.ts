@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
+import { AdminModule } from "./admin/admin.module.js";
 import { validateEnv } from "./config/env.validation.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { HealthModule } from "./health/health.module.js";
@@ -22,7 +23,7 @@ import { VisitSlotsModule } from "./visits/visit-slots.module.js";
     HealthModule,
     VisitSlotsModule,
     ReservationsModule,
-    // Tu dojdzie AdminModule — patrz README w src/admin.
+    AdminModule,
   ],
 })
 export class AppModule {}

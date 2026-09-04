@@ -1,20 +1,14 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 
-import { daysBetween } from "../common/calendar-date.js";
+import { assertDateRange } from "../common/date-range.js";
 import { Reservation } from "../reservations/reservation.entity.js";
 import {
   ACTIVE_RESERVATION_STATUSES,
   ReservationStatus,
 } from "../reservations/reservation.enums.js";
 import { VisitSlot } from "./visit-slot.entity.js";
-
-/**
- * Górny limit zakresu. Kalendarz gościa obejmuje najwyżej rok, a bez limitu
- * jedno żądanie mogłoby ściągnąć całą historię terminów.
- */
-export const MAX_RANGE_DAYS = 366;
 
 /** Co o rezerwacji wolno zobaczyć KOMUKOLWIEK. */
 export interface PublicReservation {
@@ -86,13 +80,7 @@ export class VisitSlotsService {
    * trzy pozycje.
    */
   async findInRange(from: string, to: string): Promise<PublicVisitSlot[]> {
-    if (to < from) {
-      throw new BadRequestException("Parametr 'to' nie może być wcześniejszy niż 'from'.");
-    }
-
-    if (daysBetween(from, to) > MAX_RANGE_DAYS) {
-      throw new BadRequestException(`Zakres nie może przekraczać ${MAX_RANGE_DAYS} dni.`);
-    }
+    assertDateRange(from, to);
 
     const slots = await this.slots
       .createQueryBuilder("slot")

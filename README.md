@@ -19,6 +19,7 @@ infrastruktury (`zoja-infra`).
 - [API](#api)
 - [Terminy materializują się na żądanie](#terminy-materializują-się-na-żądanie)
 - [Prywatność w odczycie publicznym](#prywatność-w-odczycie-publicznym)
+- [Admin API (tryb ?zoja)](#admin-api-tryb-zoja)
 - [Migracje przy prywatnym RDS](#migracje-przy-prywatnym-rds)
 - [Build i paczka Lambdy](#build-i-paczka-lambdy)
 - [Konfiguracja API Gateway](#konfiguracja-api-gateway)
@@ -378,6 +379,59 @@ nigdy**, niezależnie od statusu.
 Daty porównujemy w strefie `Europe/Warsaw`, nie w UTC Lambdy — inaczej między
 północą a drugą w nocy termin, który właśnie się zaczął, wyglądałby na przyszły.
 
+## Admin API (tryb `?zoja`)
+
+Operacje gospodarzy pod `/api/admin/*`. Dwa kontrolery zamiast jednego —
+rezerwacje i terminy mają różne reguły i różny cykl życia.
+
+| Metoda | Ścieżka | Co robi |
+|---|---|---|
+| GET | `/api/admin/visit-slots?from=&to=` | terminy w zakresie, **z pełną historią rezerwacji** |
+| PATCH | `/api/admin/reservations/:id` | edycja danych gościa, opcjonalnie przeniesienie terminu |
+| POST | `/api/admin/reservations/:id/confirm` | PENDING → CONFIRMED |
+| POST | `/api/admin/reservations/:id/reject` | PENDING → REJECTED |
+| POST | `/api/admin/reservations/:id/cancel` | PENDING/CONFIRMED → CANCELLED |
+| DELETE | `/api/admin/reservations/:id` | trwałe usunięcie, 204 |
+| POST | `/api/admin/visit-slots` | ręczne wystawienie terminu |
+| PATCH | `/api/admin/visit-slots/:id` | wyłącznie blokada i jej powód |
+| DELETE | `/api/admin/visit-slots/:id` | tylko termin bez historii, 204 |
+
+### Przejścia statusów
+
+Stan docelowy powtórzony u siebie jest **idempotentny** — drugie kliknięcie
+zwraca 200 i aktualny stan, a nie błąd. Panel bywa otwarty na telefonie przy
+niepewnym zasięgu, więc powtórka jest tam normalna.
+
+| Z | confirm | reject | cancel |
+|---|---|---|---|
+| PENDING | CONFIRMED | REJECTED | CANCELLED |
+| CONFIRMED | 200 (bez zmian) | **409** | CANCELLED |
+| REJECTED | **409** | 200 (bez zmian) | **409** |
+| CANCELLED | **409** | **409** | 200 (bez zmian) |
+
+Z historii nie wracamy: potwierdzenie odrzuconej prośby obiecałoby gościowi
+wizytę, o której dawno przestał myśleć.
+
+### Dwie allowlisty, nie jedna
+
+Odpowiedź publiczna i administracyjna są budowane **osobno**. Kuszące jest jedno
+mapowanie z flagą „czy admin”, ale wtedy jedna pomyłka w warunku wypuszcza
+e-maile gości na stronę. Admin widzi `guestEmail`, `notes`, `isPrivate`
+i znaczniki czasu; publiczny endpoint nie oddaje ich nigdy.
+
+### Reguły, które pilnuje serwer
+
+- `isWeekend` liczone serwerowo — DTO nie przyjmuje tego pola
+- daty terminu **nie są** edytowalne: zakres jest tożsamością terminu, a jego
+  przesunięcie przepisałoby historię rezerwacji, które już się do niego odwołują
+- blokada terminu z aktywną rezerwacją → 409; najpierw decyzja, potem blokada
+- odblokowanie czyści `blockedReason`
+- usunięcie terminu z jakąkolwiek historią → 409 (FK ma `ON DELETE RESTRICT`,
+  ale komunikat PostgreSQL nie nadaje się na ekran)
+- usunięcie rezerwacji **nie kasuje** terminu
+- kolizję dwóch aktywnych rezerwacji rozstrzyga częściowy unikalny indeks;
+  rozpoznajemy go po **nazwie constraintu**, nie po samym kodzie `23505`
+
 ## Migracje przy prywatnym RDS
 
 RDS ma `Public access = No`. TypeORM CLI z laptopa nie ma do niego trasy,
@@ -570,8 +624,13 @@ domyślny import nie jest wywoływalny.
       i `action_token_expires_at` (osobna migracja — do maila trafia token
       jawny, w bazie ląduje wyłącznie hash).
 - [ ] E-mail do gościa po zmianie rezerwacji przez rodziców.
-- [ ] Admin CRUD dla trybu `?zoja`: lista terminów, edycja, blokowanie, zmiana
-      terminu, zwalnianie.
+- [x] Admin CRUD dla trybu `?zoja` — backend.
+- [ ] **Autoryzacja `/api/admin/*`** — trasy są dziś otwarte. Do czasu jej
+      wdrożenia nie wolno wpuścić do bazy prawdziwych danych osobowych.
+- [ ] Podpiąć panel `?zoja` na froncie do prawdziwego admin API.
+- [ ] E-mail do gościa po decyzji gospodarzy (confirm / reject / cancel).
+- [ ] E-mail do gościa po edycji rezerwacji.
+- [ ] SES i linki akcji w mailach.
 - [ ] Podłączyć frontend do prawdziwego API (dziś działa na mockach).
 - [ ] Concurrency group w CI dla Lambdy migracyjnej — zastępuje niedostępną
       na tym koncie rezerwację współbieżności.
