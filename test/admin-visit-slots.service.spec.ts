@@ -31,6 +31,7 @@ function reservationRow(overrides: Record<string, unknown> = {}) {
     guestEmail: "krysia@example.com",
     arrivalDay: "saturday",
     notes: "Przyjedziemy autem.",
+    adminNote: "Dzwonili, ustalone telefonicznie.",
     isPrivate: false,
     createdAt: new Date("2099-01-01"),
     updatedAt: new Date("2099-01-01"),
@@ -101,6 +102,7 @@ describe("AdminVisitSlotsService.findInRange", () => {
     expect(first.guestEmail).toBe("krysia@example.com");
     expect(first.notes).toBe("Przyjedziemy autem.");
     expect(first.isPrivate).toBe(false);
+    expect(first.adminNote).toBe("Dzwonili, ustalone telefonicznie.");
     expect(first.createdAt).toBeInstanceOf(Date);
   });
 

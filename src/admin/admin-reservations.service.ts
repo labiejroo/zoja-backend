@@ -14,6 +14,7 @@ import { Reservation } from "../reservations/reservation.entity.js";
 import { blocksSlot, ArrivalDay, ReservationStatus } from "../reservations/reservation.enums.js";
 import { VisitSlot } from "../visits/visit-slot.entity.js";
 import { findOrCreateSlot } from "../visits/visit-slot.helpers.js";
+import type { CreateAdminReservationDto } from "./dto/create-admin-reservation.dto.js";
 import type { UpdateReservationDto } from "./dto/update-reservation.dto.js";
 
 /**
@@ -30,6 +31,8 @@ export interface AdminReservationView {
   guestEmail: string;
   arrivalDay: ArrivalDay | null;
   notes: string | null;
+  /** Prywatna notatka rodziców. Publicznie nie wychodzi nigdy. */
+  adminNote: string | null;
   isPrivate: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -54,6 +57,7 @@ export function toAdminReservation(reservation: Reservation): AdminReservationVi
     guestEmail: reservation.guestEmail,
     arrivalDay: reservation.arrivalDay,
     notes: reservation.notes,
+    adminNote: reservation.adminNote,
     isPrivate: reservation.isPrivate,
     createdAt: reservation.createdAt,
     updatedAt: reservation.updatedAt,
@@ -97,6 +101,52 @@ export class AdminReservationsService {
     return slot;
   }
 
+
+  /**
+   * Wizyta zakładana wprost przez gospodarzy.
+   *
+   * Powstaje od razu jako CONFIRMED: nie ma tu prośby, na którą ktoś miałby
+   * odpowiedzieć. Rodzice ustalili termin sami, więc stan PENDING byłby
+   * fikcją czekającą na decyzję, która już zapadła.
+   *
+   * Constraintu NIE omijamy dlatego, że żądanie przyszło z panelu. Termin
+   * zajęty przez czyjąś aktywną rezerwację zostaje zajęty także dla
+   * gospodarzy — inaczej cichy nadpis skasowałby komuś potwierdzoną wizytę.
+   */
+  async create(dto: CreateAdminReservationDto): Promise<AdminReservationWithSlot> {
+    const { dateStart, dateEnd } = dto;
+
+    if (dateEnd < dateStart) {
+      throw new BadRequestException("Data końcowa nie może być wcześniejsza niż początkowa.");
+    }
+
+    if (dateEnd < todayInWarsaw()) {
+      throw new ConflictException("Ten termin już minął.");
+    }
+
+    const slot = await findOrCreateSlot(this.slots, dateStart, dateEnd);
+
+    if (slot.isBlocked) {
+      throw new ConflictException("Ten termin jest obecnie niedostępny.");
+    }
+
+    const reservation = this.reservations.create({
+      slotId: slot.id,
+      status: ReservationStatus.CONFIRMED,
+      guestName: dto.guestName,
+      guestEmail: dto.guestEmail,
+      arrivalDay: dto.arrivalDay ?? null,
+      notes: null,
+      adminNote: dto.adminNote ?? null,
+      isPrivate: dto.isPrivate ?? false,
+    });
+
+    const saved = await this.saveGuardingActiveSlot(reservation);
+    this.logger.log(`Gospodarze utworzyli wizytę ${saved.id} na terminie ${slot.id} (CONFIRMED)`);
+
+    // TODO: send appropriate guest email for admin-created reservation once SES flow exists.
+    return withSlot(saved, slot);
+  }
   async update(id: string, dto: UpdateReservationDto): Promise<AdminReservationWithSlot> {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException("Nie podano żadnych zmian.");
@@ -121,6 +171,7 @@ export class AdminReservationsService {
     if (dto.guestEmail !== undefined) reservation.guestEmail = dto.guestEmail;
     if (dto.arrivalDay !== undefined) reservation.arrivalDay = dto.arrivalDay ?? null;
     if (dto.notes !== undefined) reservation.notes = dto.notes ?? null;
+    if (dto.adminNote !== undefined) reservation.adminNote = dto.adminNote ?? null;
     if (dto.isPrivate !== undefined) reservation.isPrivate = dto.isPrivate;
 
     const saved = await this.saveGuardingActiveSlot(reservation);

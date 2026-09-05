@@ -93,6 +93,19 @@ export class Reservation {
   notes!: string | null;
 
   /**
+   * PRYWATNA NOTATKA GOSPODARZY.
+   *
+   * Osobne pole od `notes`, mimo że oba są tekstem. `notes` to wiadomość GOŚCIA
+   * o wizycie; to jest notatka RODZICÓW o gościu. Trzymanie ich razem znaczyłoby,
+   * że jedno nadpisuje drugie i że nie da się ich różnie chronić.
+   *
+   * Nie wychodzi publicznie NIGDY — ani przy CONFIRMED, ani przy isPrivate=false.
+   * Pilnuje tego allowlista w VisitSlotsService.
+   */
+  @Column({ name: "admin_note", type: "text", nullable: true })
+  adminNote!: string | null;
+
+  /**
    * PRYWATNOŚĆ WIDOKU PUBLICZNEGO.
    *
    * false (domyślnie) — innym wolno pokazać, kto przyjeżdża

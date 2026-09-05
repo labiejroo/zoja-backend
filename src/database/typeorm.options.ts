@@ -1,5 +1,6 @@
 import type { DataSourceOptions, EntitySchema, MixedList } from "typeorm";
 
+import { AddAdminNoteToReservations1788555600000 } from "../migrations/1788555600000-AddAdminNoteToReservations.js";
 import { CreateVisitSlotsAndReservations1788517800000 } from "../migrations/1788517800000-CreateVisitSlotsAndReservations.js";
 import { Reservation } from "../reservations/reservation.entity.js";
 import { VisitSlot } from "../visits/visit-slot.entity.js";
@@ -40,6 +41,7 @@ export const ENTITIES: MixedList<string | (new () => any) | EntitySchema<any>> =
 /** REJESTR MIGRACJI — ta sama zasada co przy encjach. */
 export const MIGRATIONS: MixedList<string | (new () => any)> = [
   CreateVisitSlotsAndReservations1788517800000,
+  AddAdminNoteToReservations1788555600000,
 ];
 
 /* eslint-enable @typescript-eslint/no-explicit-any */

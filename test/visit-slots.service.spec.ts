@@ -29,6 +29,7 @@ function reservationRow(overrides: Record<string, unknown> = {}) {
     guestEmail: "krysia@example.com",
     arrivalDay: "saturday",
     notes: "Przyjedziemy autem.",
+    adminNote: "Dzwonili, ustalone telefonicznie.",
     isPrivate: false,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -120,6 +121,9 @@ describe("VisitSlotsService — prywatność", () => {
 
     // Allowlista działa tylko wtedy, gdy naprawdę nic nie przecieka.
     expect(serialized).not.toContain("krysia@example.com");
+    // Prywatna notatka rodzicow nie ma prawa opuscic panelu.
+    expect(serialized).not.toContain("Dzwonili");
+    expect(serialized).not.toContain("adminNote");
     expect(serialized).not.toContain("Przyjedziemy autem");
     expect(serialized).not.toContain("isPrivate");
     expect(serialized).not.toContain("createdAt");

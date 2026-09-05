@@ -14,6 +14,7 @@ import {
   AdminReservationsService,
   type AdminReservationWithSlot,
 } from "./admin-reservations.service.js";
+import { CreateAdminReservationDto } from "./dto/create-admin-reservation.dto.js";
 import { UpdateReservationDto } from "./dto/update-reservation.dto.js";
 
 /**
@@ -30,6 +31,17 @@ import { UpdateReservationDto } from "./dto/update-reservation.dto.js";
 @Controller("admin/reservations")
 export class AdminReservationsController {
   constructor(private readonly service: AdminReservationsService) {}
+
+  /**
+   * Wizyta zakładana wprost przez gospodarzy — na przykład umówiona przez
+   * telefon. Powstaje od razu jako CONFIRMED; statusu nie przyjmujemy z ciała
+   * żądania, bo nie ma tu prośby, na którą ktoś miałby odpowiedzieć.
+   */
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(@Body() dto: CreateAdminReservationDto): Promise<AdminReservationWithSlot> {
+    return this.service.create(dto);
+  }
 
   /** Identyfikatory walidujemy pipe'em — inaczej zły format leci do bazy. */
   @Patch(":id")

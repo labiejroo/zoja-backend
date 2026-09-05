@@ -55,6 +55,20 @@ export class UpdateReservationDto {
   @MaxLength(400)
   notes?: string | null;
 
+  /**
+   * Prywatna notatka gospodarzy. Osobna od notes, które jest wiadomością
+   * gościa — dlatego własny limit i własne pole, nie współdzielony tekst.
+   */
+  @Transform(({ value }) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  adminNote?: string | null;
+
   @IsOptional()
   @IsBoolean()
   isPrivate?: boolean;
