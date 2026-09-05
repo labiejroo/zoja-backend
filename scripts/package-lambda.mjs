@@ -6,9 +6,10 @@
  * i na Linuksie w CI. Świadomie nie używamy `zip` ani `Compress-Archive` —
  * pierwszego nie ma na Windows, drugiego nigdzie indziej.
  *
- * Jeden artefakt obsługuje DWIE funkcje Lambda:
+ * Jeden artefakt obsługuje TRZY funkcje Lambda:
  *   dist/lambda.handler            — API za API Gateway
  *   dist/migration-lambda.handler  — migracje, bez wyzwalacza
+ *   dist/mail-lambda.handler       — wysyłka maili przez SES, poza VPC
  */
 
 import { execFileSync } from "node:child_process";
@@ -54,6 +55,7 @@ async function main() {
   const requiredDistFiles = [
     "lambda.js",
     "migration-lambda.js",
+    "mail-lambda.js",
     join("database", "database-secret.js"),
   ];
 
@@ -97,6 +99,7 @@ async function main() {
   log(`gotowe: artifacts/zoja-backend.zip (${megabytes} MB)`);
   log("handler API:      dist/lambda.handler");
   log("handler migracji: dist/migration-lambda.handler");
+  log("handler maili:    dist/mail-lambda.handler");
 
   if (size > 50 * 1024 * 1024) {
     log("UWAGA: paczka przekracza 50 MB — bezpośredni upload nie zadziała, wgraj przez S3.");

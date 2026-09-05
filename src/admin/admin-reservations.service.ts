@@ -10,6 +10,9 @@ import { Repository } from "typeorm";
 
 import { todayInWarsaw } from "../common/calendar-date.js";
 import { ACTIVE_SLOT_CONSTRAINT, isUniqueViolation } from "../common/db-errors.js";
+import { MailDispatcherService } from "../mail/mail-dispatcher.service.js";
+import { MailEventType } from "../mail/mail-events.js";
+import { toMailSummary } from "../reservations/reservation-mail.js";
 import { Reservation } from "../reservations/reservation.entity.js";
 import { blocksSlot, ArrivalDay, ReservationStatus } from "../reservations/reservation.enums.js";
 import { VisitSlot } from "../visits/visit-slot.entity.js";
@@ -23,6 +26,10 @@ import type { UpdateReservationDto } from "./dto/update-reservation.dto.js";
  * To OSOBNA allowlista niż publiczna. Kuszące jest jedno wspólne mapowanie
  * z flagą "czy admin", ale wtedy jedna pomyłka w warunku wypuszcza e-maile
  * gości na stronę. Dwa niezależne kształty nie mają jak się pomylić.
+ *
+ * Pól tokenu decyzji NIE MA TU CELOWO. Panel gospodarzy ich nie potrzebuje —
+ * decyzję podejmuje przyciskiem, nie linkiem — a wypuszczenie hasha na zewnątrz
+ * oddawałoby połowę poświadczenia.
  */
 export interface AdminReservationView {
   id: string;
@@ -78,6 +85,40 @@ function withSlot(reservation: Reservation, slot: VisitSlot): AdminReservationWi
   };
 }
 
+/**
+ * CO GOŚĆ WIDZI W SWOJEJ REZERWACJI.
+ *
+ * Ta lista decyduje, czy edycja w panelu wywoła maila. Zmiana czegokolwiek
+ * spoza niej — notatki wewnętrznej, ukrycia nazwiska w kalendarzu — jest
+ * sprawą wyłącznie gospodarzy i nie ma powodu zawracać nią głowy gościowi.
+ */
+interface GuestVisibleSnapshot {
+  dateStart: string;
+  dateEnd: string;
+  guestName: string;
+  guestEmail: string;
+  arrivalDay: ArrivalDay | null;
+  notes: string | null;
+}
+
+function guestVisibleSnapshot(reservation: Reservation, slot: VisitSlot): GuestVisibleSnapshot {
+  return {
+    dateStart: slot.dateStart,
+    dateEnd: slot.dateEnd,
+    guestName: reservation.guestName,
+    guestEmail: reservation.guestEmail,
+    arrivalDay: reservation.arrivalDay,
+    notes: reservation.notes,
+  };
+}
+
+/** Status po zmianie → zdarzenie mailowe. Brak wpisu znaczy: nie powiadamiamy. */
+const DECISION_MAIL_EVENT = {
+  [ReservationStatus.CONFIRMED]: MailEventType.GUEST_CONFIRMED,
+  [ReservationStatus.REJECTED]: MailEventType.GUEST_REJECTED,
+  [ReservationStatus.CANCELLED]: MailEventType.GUEST_CANCELLED,
+} as const;
+
 @Injectable()
 export class AdminReservationsService {
   private readonly logger = new Logger(AdminReservationsService.name);
@@ -87,6 +128,7 @@ export class AdminReservationsService {
     private readonly reservations: Repository<Reservation>,
     @InjectRepository(VisitSlot)
     private readonly slots: Repository<VisitSlot>,
+    private readonly mail: MailDispatcherService,
   ) {}
 
   private async findOr404(id: string): Promise<Reservation> {
@@ -101,13 +143,15 @@ export class AdminReservationsService {
     return slot;
   }
 
-
   /**
    * Wizyta zakładana wprost przez gospodarzy.
    *
    * Powstaje od razu jako CONFIRMED: nie ma tu prośby, na którą ktoś miałby
    * odpowiedzieć. Rodzice ustalili termin sami, więc stan PENDING byłby
    * fikcją czekającą na decyzję, która już zapadła.
+   *
+   * Z tego samego powodu NIE POWSTAJE TOKEN DECYZJI. Nie ma czego zatwierdzać,
+   * a każdy czynny token to jeden link więcej, który mógłby kiedyś zadziałać.
    *
    * Constraintu NIE omijamy dlatego, że żądanie przyszło z panelu. Termin
    * zajęty przez czyjąś aktywną rezerwację zostaje zajęty także dla
@@ -139,14 +183,23 @@ export class AdminReservationsService {
       notes: null,
       adminNote: dto.adminNote ?? null,
       isPrivate: dto.isPrivate ?? false,
+      decisionTokenHash: null,
+      decisionTokenExpiresAt: null,
     });
 
     const saved = await this.saveGuardingActiveSlot(reservation);
     this.logger.log(`Gospodarze utworzyli wizytę ${saved.id} na terminie ${slot.id} (CONFIRMED)`);
 
-    // TODO: send appropriate guest email for admin-created reservation once SES flow exists.
+    // Gość dowiaduje się, że wizyta jest już w kalendarzu. Bez linków decyzji:
+    // nie ma tu nic do rozstrzygnięcia.
+    await this.mail.dispatch({
+      type: MailEventType.ADMIN_CREATED_RESERVATION,
+      ...toMailSummary(saved, slot),
+    });
+
     return withSlot(saved, slot);
   }
+
   async update(id: string, dto: UpdateReservationDto): Promise<AdminReservationWithSlot> {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException("Nie podano żadnych zmian.");
@@ -163,6 +216,11 @@ export class AdminReservationsService {
     const reservation = await this.findOr404(id);
     let slot = await this.slotOf(reservation);
 
+    // Zdjęcie stanu PRZED zmianami. Porównujemy wartości, a nie obecność pól
+    // w żądaniu: panel wysyła cały formularz, więc sama obecność guestName
+    // nie znaczy jeszcze, że imię się zmieniło.
+    const before = guestVisibleSnapshot(reservation, slot);
+
     if (dto.dateStart !== undefined && dto.dateEnd !== undefined) {
       slot = await this.moveToSlot(reservation, dto.dateStart, dto.dateEnd, slot);
     }
@@ -177,7 +235,26 @@ export class AdminReservationsService {
     const saved = await this.saveGuardingActiveSlot(reservation);
     this.logger.log(`Zaktualizowano rezerwację ${saved.id} na terminie ${slot.id}`);
 
-    // TODO: send guest email after reservation edit
+    const after = guestVisibleSnapshot(saved, slot);
+    const guestVisibleChanged = (Object.keys(before) as (keyof GuestVisibleSnapshot)[]).some(
+      (field) => before[field] !== after[field],
+    );
+
+    /**
+     * Mail idzie na adres PO zmianie.
+     *
+     * Jeżeli poprawiono literówkę w adresie, wiadomość ma trafić tam, gdzie
+     * gość ją przeczyta — a nie pod adres, który właśnie uznano za błędny.
+     * toMailSummary bierze dane z zapisanej encji, więc dzieje się to samo
+     * z siebie; ta uwaga jest po to, żeby nikt tego przez pomyłkę nie odwrócił.
+     */
+    if (guestVisibleChanged) {
+      await this.mail.dispatch({
+        type: MailEventType.GUEST_RESERVATION_UPDATED,
+        ...toMailSummary(saved, slot),
+      });
+    }
+
     return withSlot(saved, slot);
   }
 
@@ -244,6 +321,9 @@ export class AdminReservationsService {
    * w ten sam przycisk (albo podwójnie wysłane żądanie) ma zwrócić 200
    * i aktualny stan, a nie błąd. Panel gospodarzy bywa otwarty na telefonie
    * przy niepewnym zasięgu — powtórka jest tam normalna, nie wyjątkowa.
+   *
+   * Wyjście następuje PRZED zapisem i przed mailem, więc powtórka nie wysyła
+   * gościowi drugiego powiadomienia o tej samej decyzji.
    */
   private async transition(
     id: string,
@@ -262,11 +342,32 @@ export class AdminReservationsService {
     }
 
     reservation.status = to;
+
+    /**
+     * DECYZJA W PANELU UNIEWAŻNIA LINK Z MAILA.
+     *
+     * Rodzice mogli dostać maila, a potem wejść w ?zoja i kliknąć tam. Gdyby
+     * token przeżył, stary link w skrzynce nadal działałby na rezerwacji,
+     * o której już zdecydowano — a przy przekazanej dalej wiadomości mógłby
+     * kliknąć ktoś zupełnie inny.
+     *
+     * Kasujemy w TYM SAMYM zapisie co zmianę statusu, żeby nie dało się
+     * zostawić bazy w stanie: status zmieniony, link nadal czynny.
+     */
+    reservation.decisionTokenHash = null;
+    reservation.decisionTokenExpiresAt = null;
+
     const saved = await this.saveGuardingActiveSlot(reservation);
     this.logger.log(`Rezerwacja ${saved.id}: status ${to}`);
 
-    // TODO: send guest email after admin decision
-    return withSlot(saved, await this.slotOf(saved));
+    const slot = await this.slotOf(saved);
+    const mailEvent = DECISION_MAIL_EVENT[to as keyof typeof DECISION_MAIL_EVENT];
+
+    if (mailEvent) {
+      await this.mail.dispatch({ type: mailEvent, ...toMailSummary(saved, slot) });
+    }
+
+    return withSlot(saved, slot);
   }
 
   confirm(id: string): Promise<AdminReservationWithSlot> {

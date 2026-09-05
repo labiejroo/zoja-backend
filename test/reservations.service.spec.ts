@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CreateReservationDto } from "../src/reservations/dto/create-reservation.dto.js";
 import { ReservationStatus } from "../src/reservations/reservation.enums.js";
 import { ReservationsService } from "../src/reservations/reservations.service.js";
+import { mailSpy } from "./helpers/mail.js";
 
 /** Daleka przyszłość — testy nie mogą zestarzeć się razem z kalendarzem. */
 const FUTURE_SATURDAY = "2099-09-05";
@@ -57,12 +58,10 @@ function setup(overrides: { slotFindOne?: unknown[]; save?: () => unknown } = {}
     save: vi.fn(overrides.save ?? ((entity: Record<string, unknown>) => ({ ...entity, id: "res-1" }))),
   };
 
-  const service = new ReservationsService(
-    reservations as never,
-    slots as never,
-  );
+  const mail = mailSpy();
+  const service = new ReservationsService(reservations as never, slots as never, mail.service);
 
-  return { service, slots, reservations, insertQb, created };
+  return { service, slots, reservations, insertQb, created, mail };
 }
 
 describe("ReservationsService.create", () => {

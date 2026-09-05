@@ -5,6 +5,7 @@ import { AdminModule } from "./admin/admin.module.js";
 import { validateEnv } from "./config/env.validation.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { HealthModule } from "./health/health.module.js";
+import { ReservationActionsModule } from "./reservation-actions/reservation-actions.module.js";
 import { ReservationsModule } from "./reservations/reservations.module.js";
 import { VisitSlotsModule } from "./visits/visit-slots.module.js";
 
@@ -23,6 +24,7 @@ import { VisitSlotsModule } from "./visits/visit-slots.module.js";
     HealthModule,
     VisitSlotsModule,
     ReservationsModule,
+    ReservationActionsModule,
     AdminModule,
   ],
 })

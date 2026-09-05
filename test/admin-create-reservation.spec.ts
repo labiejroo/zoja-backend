@@ -8,6 +8,7 @@ import { AdminReservationsService } from "../src/admin/admin-reservations.servic
 import { CreateAdminReservationDto } from "../src/admin/dto/create-admin-reservation.dto.js";
 import { UpdateReservationDto } from "../src/admin/dto/update-reservation.dto.js";
 import { ReservationStatus } from "../src/reservations/reservation.enums.js";
+import { mailSpy } from "./helpers/mail.js";
 
 const FUTURE_SATURDAY = "2099-09-05";
 const FUTURE_SUNDAY = "2099-09-06";
@@ -62,8 +63,9 @@ function setup(options: { slot?: Record<string, unknown>; save?: () => unknown }
     remove: vi.fn(),
   };
 
-  const service = new AdminReservationsService(reservations as never, slots as never);
-  return { service, slots, reservations, created, insertQb };
+  const mail = mailSpy();
+  const service = new AdminReservationsService(reservations as never, slots as never, mail.service);
+  return { service, slots, reservations, created, insertQb, mail };
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { DataSourceOptions, EntitySchema, MixedList } from "typeorm";
 
 import { AddAdminNoteToReservations1788555600000 } from "../migrations/1788555600000-AddAdminNoteToReservations.js";
+import { AddDecisionTokenToReservations1788642000000 } from "../migrations/1788642000000-AddDecisionTokenToReservations.js";
 import { CreateVisitSlotsAndReservations1788517800000 } from "../migrations/1788517800000-CreateVisitSlotsAndReservations.js";
 import { Reservation } from "../reservations/reservation.entity.js";
 import { VisitSlot } from "../visits/visit-slot.entity.js";
@@ -42,6 +43,7 @@ export const ENTITIES: MixedList<string | (new () => any) | EntitySchema<any>> =
 export const MIGRATIONS: MixedList<string | (new () => any)> = [
   CreateVisitSlotsAndReservations1788517800000,
   AddAdminNoteToReservations1788555600000,
+  AddDecisionTokenToReservations1788642000000,
 ];
 
 /* eslint-enable @typescript-eslint/no-explicit-any */

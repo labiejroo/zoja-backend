@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
+import { MailModule } from "../mail/mail.module.js";
 import { Reservation } from "../reservations/reservation.entity.js";
 import { VisitSlot } from "../visits/visit-slot.entity.js";
 import { AdminReservationsController } from "./admin-reservations.controller.js";
@@ -18,7 +19,7 @@ import { AdminVisitSlotsService } from "./admin-visit-slots.service.js";
  * Schemat bazy się nie zmienia: żadnych nowych encji ani migracji.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Reservation, VisitSlot])],
+  imports: [TypeOrmModule.forFeature([Reservation, VisitSlot]), MailModule],
   controllers: [AdminReservationsController, AdminVisitSlotsController],
   providers: [AdminReservationsService, AdminVisitSlotsService],
 })

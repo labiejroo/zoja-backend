@@ -1,5 +1,15 @@
 import { plainToInstance, Transform } from "class-transformer";
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsString, Max, Min, validateSync } from "class-validator";
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  Max,
+  Min,
+  ValidateIf,
+  validateSync,
+} from "class-validator";
 
 /**
  * Zmienna środowiskowa "false" jest niepustym stringiem, więc zwykła konwersja
@@ -54,6 +64,35 @@ export class EnvironmentVariables {
   @Transform(toBoolean)
   @IsBoolean()
   DB_LOGGING: boolean = false;
+
+  /**
+   * WYŁĄCZNIK WYSYŁKI MAILI.
+   *
+   * Domyślnie false i to jest stan docelowy do czasu, aż SES wyjdzie z trybu
+   * piaskownicy. Przy false MailDispatcherService nie robi NIC — nie rzuca
+   * błędu, nie próbuje wywołać Mail Lambdy, nie opóźnia odpowiedzi. Rezerwacje
+   * działają normalnie, tylko bez powiadomień.
+   *
+   * Flaga jest po to, żeby cały tor mailowy dało się wdrożyć na produkcję
+   * martwy, a włączyć jedną zmienną środowiskową — bez ponownego deployu kodu.
+   */
+  @Transform(toBoolean)
+  @IsBoolean()
+  EMAIL_ENABLED: boolean = false;
+
+  /**
+   * Nazwa funkcji Mail Lambda. Nie zapisujemy jej na sztywno w kodzie, bo
+   * nazwa należy do infrastruktury, a ta bywa inna na kolejnych środowiskach.
+   *
+   * Wymagana TYLKO przy EMAIL_ENABLED=true. Gdyby była wymagana zawsze,
+   * uruchomienie API bez maili wymagałoby ustawiania zmiennej, która do niczego
+   * nie służy; gdyby nie była wymagana nigdy, włączenie maili kończyłoby się
+   * cichym błędem przy pierwszej rezerwacji zamiast głośnym na starcie.
+   */
+  @ValidateIf((env: EnvironmentVariables) => env.EMAIL_ENABLED)
+  @IsString()
+  @IsNotEmpty()
+  MAIL_LAMBDA_FUNCTION_NAME: string = "";
 }
 
 /**

@@ -123,8 +123,25 @@ export class Reservation {
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt!: Date;
 
-  // TODO (etap e-mail): actionTokenHash + actionTokenExpiresAt.
-  // Linki Potwierdź/Odrzuć nie mogą opierać się na samym id rezerwacji — to
-  // dawałoby możliwość zgadywania. Do maila trafi token jawny, w bazie
-  // wyląduje wyłącznie jego hash. Osobna migracja, osobny etap.
+  /**
+   * TOKEN DECYZJI Z MAILA — WYŁĄCZNIE JAKO HASH.
+   *
+   * Do rodziców wysyłamy token jawny; tutaj ląduje jego SHA-256 w hexie.
+   * Wyciek kopii bazy nie daje wtedy nikomu działającego linku, bo z hasha nie
+   * da się odtworzyć oryginału. To ta sama zasada, co przy hasłach — z tą
+   * różnicą, że token jest losowy i jednorazowy, więc zwykły SHA-256 wystarcza:
+   * nie ma czego zgadywać słownikiem.
+   *
+   * NULL znaczy „nie ma czym decydować”: rezerwacja założona przez gospodarzy
+   * jest od razu potwierdzona, a po każdej decyzji token kasujemy.
+   */
+  @Column({ name: "decision_token_hash", type: "varchar", length: 64, nullable: true })
+  decisionTokenHash!: string | null;
+
+  /**
+   * Po tej chwili link z maila przestaje działać. Siedem dni starcza na
+   * decyzję, a nie zostawia w skrzynce czynnego linku na zawsze.
+   */
+  @Column({ name: "decision_token_expires_at", type: "timestamptz", nullable: true })
+  decisionTokenExpiresAt!: Date | null;
 }

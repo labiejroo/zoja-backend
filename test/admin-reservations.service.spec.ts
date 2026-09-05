@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AdminReservationsService } from "../src/admin/admin-reservations.service.js";
 import type { UpdateReservationDto } from "../src/admin/dto/update-reservation.dto.js";
 import { ReservationStatus } from "../src/reservations/reservation.enums.js";
+import { mailSpy } from "./helpers/mail.js";
 
 const FUTURE_SATURDAY = "2099-09-05";
 const FUTURE_SUNDAY = "2099-09-06";
@@ -80,8 +81,9 @@ function setup(options: SetupOptions = {}) {
     remove: vi.fn().mockResolvedValue(undefined),
   };
 
-  const service = new AdminReservationsService(reservations as never, slots as never);
-  return { service, reservations, slots, insertQb };
+  const mail = mailSpy();
+  const service = new AdminReservationsService(reservations as never, slots as never, mail.service);
+  return { service, reservations, slots, insertQb, mail };
 }
 
 describe("AdminReservationsService — przejścia statusów", () => {
