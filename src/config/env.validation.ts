@@ -93,6 +93,32 @@ export class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   MAIL_LAMBDA_FUNCTION_NAME: string = "";
+
+  /**
+   * NAZWA SEKRETU Z HASŁEM GOSPODARZY.
+   *
+   * Sama nazwa sekretem nie jest, więc Terraform może nią spokojnie zarządzać.
+   * W środowisku trafia tu wartość z aws_secretsmanager_secret.admin_auth.name;
+   * default jest tylko po to, żeby lokalne uruchomienie nie wymagało ustawiania
+   * zmiennej, której i tak nie da się odczytać bez uprawnień AWS.
+   *
+   * Sekret jest OSOBNY od zoja/database — uprawnienie nadaje się na ARN, więc
+   * wspólny dokument oznaczałby, że kod potrzebujący hasła do bazy dostaje
+   * przy okazji hasło do panelu.
+   */
+  @IsString()
+  @IsNotEmpty()
+  ADMIN_AUTH_SECRET_ID: string = "zoja/admin-auth";
+
+  /**
+   * Jak długo żyje sesja gospodarzy. Doba: dłużej niż jedno posiedzenie przy
+   * kalendarzu, krócej niż zapomniana otwarta karta na cudzym laptopie.
+   */
+  @Transform(({ value }) => Number(value ?? 86400))
+  @IsInt()
+  @Min(60)
+  @Max(604800)
+  ADMIN_SESSION_TTL_SECONDS: number = 86400;
 }
 
 /**

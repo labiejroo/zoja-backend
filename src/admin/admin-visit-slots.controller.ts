@@ -10,8 +10,10 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from "@nestjs/common";
 
+import { AdminSessionGuard } from "../admin-auth/admin-session.guard.js";
 import { ListVisitSlotsQueryDto } from "../visits/dto/list-visit-slots.query.js";
 import {
   AdminVisitSlotsService,
@@ -27,6 +29,7 @@ import { UpdateVisitSlotDto } from "./dto/update-visit-slot.dto.js";
  * tak samo po obu stronach, żeby panel nie przepuszczał zapytań, których
  * strona gościa nie przepuszcza.
  */
+@UseGuards(AdminSessionGuard)
 @Controller("admin/visit-slots")
 export class AdminVisitSlotsController {
   constructor(private readonly service: AdminVisitSlotsService) {}

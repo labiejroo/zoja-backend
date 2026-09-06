@@ -8,8 +8,10 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UseGuards,
 } from "@nestjs/common";
 
+import { AdminSessionGuard } from "../admin-auth/admin-session.guard.js";
 import {
   AdminReservationsService,
   type AdminReservationWithSlot,
@@ -28,6 +30,7 @@ import { UpdateReservationDto } from "./dto/update-reservation.dto.js";
  * bazy nie wolno wpuścić prawdziwych danych osobowych, dopóki nie dojdzie
  * mechanizm logowania. Patrz README.
  */
+@UseGuards(AdminSessionGuard)
 @Controller("admin/reservations")
 export class AdminReservationsController {
   constructor(private readonly service: AdminReservationsService) {}

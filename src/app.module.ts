@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
+import { AdminAuthModule } from "./admin-auth/admin-auth.module.js";
 import { AdminModule } from "./admin/admin.module.js";
 import { validateEnv } from "./config/env.validation.js";
 import { DatabaseModule } from "./database/database.module.js";
@@ -25,6 +26,7 @@ import { VisitSlotsModule } from "./visits/visit-slots.module.js";
     VisitSlotsModule,
     ReservationsModule,
     ReservationActionsModule,
+    AdminAuthModule,
     AdminModule,
   ],
 })
